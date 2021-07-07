@@ -17,6 +17,8 @@ public class Question {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    private String name;
+    private String q_aze;
+    private String q_ru;
+    private String q_eng;
     private Boolean isFirst;
 }
