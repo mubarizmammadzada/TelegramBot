@@ -1,5 +1,6 @@
 package com.example.tourappbot.models;
 
+import com.example.tourappbot.enums.ActionType;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -14,7 +15,7 @@ public class Action {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    private AccessType type;
+    private ActionType type;
     private String text;
     @ManyToOne(cascade = CascadeType.ALL)
     @JoinColumn(name = "question_Id")

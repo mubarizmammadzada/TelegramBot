@@ -9,4 +9,5 @@ import org.springframework.stereotype.Repository;
 public interface QuestionRepository extends JpaRepository<Question, Long> {
     @Query("select q from Question q where q.isFirst=true")
     Question getQuestionByIsFirst();
+
 }
