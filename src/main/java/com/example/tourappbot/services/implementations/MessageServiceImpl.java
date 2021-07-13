@@ -1,11 +1,15 @@
 package com.example.tourappbot.services.implementations;
 
+import com.example.tourappbot.Session;
 import com.example.tourappbot.TelegramBot;
 import com.example.tourappbot.enums.ActionType;
 import com.example.tourappbot.models.Action;
 import com.example.tourappbot.models.Question;
 import com.example.tourappbot.repostiories.ActionRepository;
 import com.example.tourappbot.repostiories.QuestionRepository;
+import com.example.tourappbot.services.interfaces.ActionService;
+import com.example.tourappbot.services.interfaces.QuestionService;
+import org.checkerframework.checker.units.qual.A;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -13,190 +17,172 @@ import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageTe
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardRemove;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.net.Proxy;
 import java.util.*;
 import java.util.stream.Collectors;
 
-
 @Service
 public class MessageServiceImpl implements com.example.tourappbot.services.interfaces.MessageService {
-    QuestionRepository repository;
-    ActionRepository actionRepository;
-    TelegramBot telegramBot;
+    ActionService actionService;
+    QuestionService questionService;
+    private static int counter = 0;
 
-    public MessageServiceImpl(QuestionRepository repository, ActionRepository actionRepository, TelegramBot telegramBot) {
-        this.repository = repository;
-        this.actionRepository = actionRepository;
-        this.telegramBot = telegramBot;
+    public MessageServiceImpl(ActionService actionService, QuestionService questionService) {
+        this.actionService = actionService;
+        this.questionService = questionService;
     }
 
     @Override
-    public BotApiMethod<?> sendMessage(Update update, Map<Long, Map<String, String>> user_question_map) {
-        String chat_id_str;
-        long chat_id;
-        if (update.hasCallbackQuery()) {
-            chat_id = update.getCallbackQuery().getFrom().getId();
-            chat_id_str = String.valueOf(chat_id);
-            if (!user_question_map.containsKey(update.getCallbackQuery().getFrom().getId())) {
-                return selectLanguage(update, chat_id, chat_id_str, user_question_map);
-            } else {
-                return clickButton(update, user_question_map);
-            }
-        }
+    public BotApiMethod<?> sendMessage(Update update, Map<Long, Session> user_question_map) {
         if (update.getMessage().getText().equals("/start")) {
             return startMessaging(update, user_question_map);
         } else {
             return sendNextMessage(update, user_question_map);
         }
-
     }
 
     @Override
-    public SendMessage sendNextMessage(Update update, Map<Long, Map<String, String>> user_question_map) {
-        List<String> actionn;
-        System.out.println(user_question_map);
-        if (update.getMessage() != null) {
-            actionn = new ArrayList<>(user_question_map.get(update.getMessage().getFrom().getId()).values());
-        } else {
-            actionn = new ArrayList<>(user_question_map.get(update.getCallbackQuery().getFrom().getId()).values());
-        }
-        System.out.println(actionn);
-        Action action = actionRepository.getActionByText(actionn.get(actionn.size() - 1));
-        Question senderQuestion = action.getNextQuestion();
-        List<Action> nextAction = actionRepository.findAll().stream().filter(a -> a.getQuestion().equals(senderQuestion)).collect(Collectors.toList());
+    public SendMessage sendNextMessage(Update update, Map<Long, Session> user_question_map) {
+        Map<String, String> map = new HashMap<>();
         SendMessage sendMessage = new SendMessage();
-        if (nextAction.get(0).getType().equals(ActionType.BUTTON)) {
-            InlineKeyboardMarkup markupLine = new InlineKeyboardMarkup();
-            List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
-            List<InlineKeyboardButton> rowInline = new ArrayList<>();
-            for (Action a : actionRepository.findAll().stream().filter(b -> b.getQuestion().equals(senderQuestion)).collect(Collectors.toList())) {
-                InlineKeyboardButton inlineKeyboardButton = new InlineKeyboardButton();
-                inlineKeyboardButton.setText(a.getText());
-                inlineKeyboardButton.setCallbackData(a.getText().toLowerCase());
-                rowInline.add(inlineKeyboardButton);
-            }
-            rowsInline.add(rowInline);
-            markupLine.setKeyboard(rowsInline);
-            sendMessage.setReplyMarkup(markupLine);
-
-            if (senderQuestion != null) {
-                String message = "";
-                switch (action.getText()) {
-                    case "AZ":
-                        message = repository.findAll().stream().filter(q -> q.getQ_aze().equals(senderQuestion.getQ_aze()))
-                                .findAny().get().getQ_aze();
-                        break;
-                    case "EN":
-                        message = repository.findAll().stream().filter(q -> q.getQ_eng().equals(senderQuestion.getQ_eng()))
-                                .findAny().get().getQ_eng();
-                        break;
-                    case "RU":
-                        message = repository.findAll().stream().filter(q -> q.getQ_ru().equals(senderQuestion.getQ_ru()))
-                                .findAny().get().getQ_ru();
-                        break;
-                }
-                sendMessage.setChatId(update.getMessage().getChatId().toString());
-                sendMessage.setText(message);
-                return sendMessage;
-            }
+        Action action = null;
+        long userId = update.getMessage().getFrom().getId();
+        Question nextQuestion = null;
+        String user_Language = "";
+        Session user_question;
+        if (!user_question_map.containsKey(update.getMessage().getFrom().getId())) {
+            setLanguage(update.getMessage().getText(), user_question_map, action, update);
         }
-        if (senderQuestion != null) {
-            String message = "";
-            switch (action.getText()) {
-                case "AZ":
-                    message = repository.findAll().stream().filter(q -> q.getQ_aze().equals(senderQuestion.getQ_aze())).findAny().get().getQ_aze();
-                    break;
-                case "EN":
-                    message = repository.findAll().stream().filter(q -> q.getQ_eng().equals(senderQuestion.getQ_eng())).findAny().get().getQ_eng();
-                    break;
-                case "RU":
-                    message = repository.findAll().stream().filter(q -> q.getQ_ru().equals(senderQuestion.getQ_ru())).findAny().get().getQ_ru();
-                    break;
-            }
-            return new SendMessage(update.getMessage().getChatId().toString(), message);
+        if (update.getMessage().getText().equals("TourApp təklif etsin.")) {
+            System.out.println("OK");
         }
-        return null;
-    }
-
-    @Override
-    public SendMessage startMessaging(Update update, Map<Long, Map<String, String>> user_question_map) {
-        long chat_id = update.getMessage().getChatId();
-        String chat_id_str = String.valueOf(chat_id);
-        String first_question = repository.getQuestionByIsFirst().getQ_aze() + "\n" +
-                repository.getQuestionByIsFirst().getQ_eng() + "\n" +
-                repository.getQuestionByIsFirst().getQ_ru();
-        SendMessage sendMessage = new SendMessage(chat_id_str, first_question);
-        if (user_question_map.containsKey(update.getMessage().getFrom().getId()) && user_question_map.get(update.getMessage().getFrom().getId()).equals(first_question)) {
-            return new SendMessage(chat_id_str, "Siz artiq bashlamisiniz");
+        user_question = user_question_map.get(userId);
+        user_Language = getUserLanguage(user_question.getUserAnswers());
+        if (user_question.getSessionCount() == 0) {
+            nextQuestion = user_question.getAction().getNextQuestion();
+            user_question.setSessionCount(1);
+        } else {
+            Question question = user_question.getAction().getNextQuestion();
+            List<Action> a = actionService.getActionsByQuestion(question);
+            nextQuestion = a.get(0).getNextQuestion();
         }
-        InlineKeyboardMarkup markupLine = new InlineKeyboardMarkup();
-        List<List<InlineKeyboardButton>> rowsInline = new ArrayList<>();
-        List<InlineKeyboardButton> rowInline = new ArrayList<>();
-        for (Action a : actionRepository.findAll().stream().filter(a -> a.getQuestion().getId() == 1).collect(Collectors.toList())) {
-            InlineKeyboardButton inlineKeyboardButton = new InlineKeyboardButton();
-            inlineKeyboardButton.setText(a.getText());
-            inlineKeyboardButton.setCallbackData(a.getText().toLowerCase());
-            rowInline.add(inlineKeyboardButton);
-        }
-        rowsInline.add(rowInline);
-        markupLine.setKeyboard(rowsInline);
-        sendMessage.setReplyMarkup(markupLine);
+        List<Action> actions = actionService.getActionsByQuestion(nextQuestion);
+        ReplyKeyboardRemove remove = new ReplyKeyboardRemove();
+        remove.setRemoveKeyboard(true);
+        initMehtod(actions, sendMessage, user_Language, user_question_map, update, nextQuestion);
+        sendMessage.setChatId(update.getMessage().getChatId().toString());
         return sendMessage;
     }
 
-    @Override
-    public EditMessageText selectLanguage(Update update, Long chat_id, String chat_id_str, Map<Long, Map<String, String>> user_question_map) {
-        CallbackQuery callbackQuery = update.getCallbackQuery();
-        String first_question = repository.getQuestionByIsFirst().getQ_aze() + "\n" +
-                repository.getQuestionByIsFirst().getQ_eng() + "\n" +
-                repository.getQuestionByIsFirst().getQ_ru();
-        Map<String, String> user_map = new HashMap<>();
-        Long user_id = callbackQuery.getFrom().getId();
-        if (callbackQuery.getData().equals(actionRepository.getActionByText("AZ").getText().toLowerCase())) {
-            EditMessageText messageText = new EditMessageText();
-            messageText.setText("Azərbaycan dilini seçdiniz");
-            messageText.setChatId(callbackQuery.getMessage().getChatId().toString());
-            messageText.setMessageId(callbackQuery.getMessage().getMessageId());
-            user_map.put(first_question, actionRepository.getActionByText("AZ").getText());
-            user_question_map.put(user_id, user_map);
-            System.out.println(user_question_map.get(update.getCallbackQuery().getFrom().getId()).values());
-            return messageText;
-        } else if (callbackQuery.getData().equals(actionRepository.getActionByText("EN").getText().toLowerCase())) {
-            EditMessageText messageText = new EditMessageText();
-            messageText.setText("You chose English");
-            messageText.setChatId(callbackQuery.getMessage().getChatId().toString());
-            messageText.setMessageId(callbackQuery.getMessage().getMessageId());
-            user_map.put(first_question, actionRepository.getActionByText("EN").getText());
-            user_question_map.put(user_id, user_map);
-            return messageText;
-        } else if (callbackQuery.getData().equals(actionRepository.getActionByText("RU").getText().toLowerCase())) {
-            EditMessageText messageText = new EditMessageText();
-            messageText.setText("Ты выбрал русский");
-            messageText.setChatId(callbackQuery.getMessage().getChatId().toString());
-            messageText.setMessageId(callbackQuery.getMessage().getMessageId());
-            user_map.put(first_question, actionRepository.getActionByText("RU").getText());
-            user_question_map.put(user_id, user_map);
-            return messageText;
+    public void initMehtod(List<Action> actions,
+                           SendMessage sendMessage,
+                           String user_Language,
+                           Map<Long, Session> user_question_map, Update update,
+                           Question nextQuestion) {
+        Action action;
+        if (update.getMessage().getText().equals("TourApp təklif etsin.")) {
+            System.out.println("OK");
+        }
+        if (actions.size() > 1) {
+            action = actionService.getActionByText(update.getMessage().getText());
+            if (action != null) {
+                List<KeyboardRow> keyboard = createRepKeyboard(actions);
+                sendMessage.setReplyMarkup(new ReplyKeyboardMarkup(keyboard, true, false, true, ""));
+                user_question_map.get(update.getMessage().getFrom().getId()).setAction(action);
+            }
+        } else {
+            if(actions.size()!=0){
+                user_question_map.get(update.getMessage().getFrom().getId()).setAction(actions.get(0));
+            }
         }
 
-        return null;
+        setSessionMap(user_Language, user_question_map, sendMessage, update, nextQuestion);
     }
 
+    private void setSessionMap(String user_Language, Map<Long, Session> user_question_map, SendMessage sendMessage,
+                               Update update, Question nextQuestion) {
+        if (update.getMessage().getText().equals("TourApp təklif etsin.")) {
+            System.out.println("OK");
+        }
+        if (user_Language.equals("AZ")) {
+            user_question_map.get(update.getMessage().getFrom().getId()).getUserAnswers()
+                    .put(nextQuestion.getQ_aze(), null);
+            sendMessage.setText(nextQuestion.getQ_aze());
+        } else if (user_Language.equals("EN")) {
+            user_question_map.get(update.getMessage().getFrom().getId()).getUserAnswers()
+                    .put(nextQuestion.getQ_aze(), null);
+            sendMessage.setText(nextQuestion.getQ_eng());
+        } else if (user_Language.equals("RU")) {
+            user_question_map.get(update.getMessage().getFrom().getId()).getUserAnswers()
+                    .put(nextQuestion.getQ_aze(), null);
+            sendMessage.setText(nextQuestion.getQ_ru());
+        }
+    }
 
     @Override
-    public SendMessage clickButton(Update update, Map<Long, Map<String, String>> user_question_map) {
-        CallbackQuery callbackQuery = update.getCallbackQuery();
-//        Map<String,String> map=user_question_map.get()
-        String first_question = repository.getQuestionByIsFirst().getQ_aze() + "\n" +
-                repository.getQuestionByIsFirst().getQ_eng() + "\n" +
-                repository.getQuestionByIsFirst().getQ_ru();
-        Map<String, String> user_map = new HashMap<>();
-        Long user_id = callbackQuery.getFrom().getId();
-        return null;
+    public SendMessage startMessaging(Update update, Map<Long, Session> user_map) {
+        long chat_id = update.getMessage().getChatId();
+        String chat_id_str = String.valueOf(chat_id);
+        String first_question = questionService.getQuestionByFirst().getQ_aze() + "\n" +
+                questionService.getQuestionByFirst().getQ_eng() + "\n" +
+                questionService.getQuestionByFirst().getQ_ru();
+        SendMessage sendMessage = new SendMessage(chat_id_str, first_question);
+//        Session session = new Session();
+//        if (user_map.get(update.getMessage().getFrom().getId()).getUserAnswers().containsKey(update.getMessage().getFrom().getId()) &&
+//                user_map.get(update.getMessage().getFrom().getId()).getUserAnswers().get(update.getMessage().getFrom().getId()).equals(first_question)) {
+//            return new SendMessage(chat_id_str, "Siz artiq bashlamisiniz");
+//        }
+        List<KeyboardRow> keyboard = createRepKeyboard(actionService.getAllActions().stream().filter(a -> a.getQuestion().getId() == 1).collect(Collectors.toList()));
+        sendMessage.setReplyMarkup(new ReplyKeyboardMarkup(keyboard, true, false, true, ""));
+        return sendMessage;
     }
 
+    public List<KeyboardRow> createRepKeyboard(List<Action> actionTranslates) {
+        List<KeyboardRow> keyboard = new ArrayList<>();
+        for (Action text : actionTranslates) {
+            KeyboardRow row = new KeyboardRow();
+            row.add(new KeyboardButton(text.getText()));
+            keyboard.add(row);
+        }
+        return keyboard;
+    }
 
+    public void setLanguage(String language, Map<Long, Session> user_question_map, Action action, Update update) {
+        SendMessage sendMessage = new SendMessage();
+        Session session = new Session();
+        if (update.getMessage().getText().equals("AZ")) {
+            action = actionService.getActionByText("AZ");
+            session.setAction(action);
+            session.getUserAnswers().put(action.getQuestion().getQ_aze(), action.getText());
+            user_question_map.put(update.getMessage().getFrom().getId(), session);
+        } else if (update.getMessage().getText().equals("EN")) {
+            action = actionService.getActionByText("EN");
+            session.setAction(action);
+            session.getUserAnswers().put(action.getQuestion().getQ_eng(), action.getText());
+            user_question_map.put(update.getMessage().getFrom().getId(), session);
+        } else if (update.getMessage().getText().equals("RU")) {
+            action = actionService.getActionByText("RU");
+            session.setAction(action);
+            session.getUserAnswers().put(action.getQuestion().getQ_ru(), action.getText());
+            user_question_map.put(update.getMessage().getFrom().getId(), session);
+        }
+    }
+
+    public String getUserLanguage(Map<String, String> user_question) {
+        if (user_question.values().stream().filter(a -> a.equals("AZ")) != null) {
+            return "AZ";
+        } else if (user_question.values().stream().filter(a -> a.equals("EN")) != null) {
+            return "EN";
+        } else if (user_question.values().stream().filter(a -> a.equals("RU")) != null) {
+            return "RU";
+        }
+        return null;
+    }
 }

@@ -35,21 +35,15 @@ public class TelegramBot extends TelegramWebhookBot {
     QuestionRepository repository;
     @Autowired
     MessageService service;
-    Map<Long, Map<String, String>> user_question_map = new HashMap<>();
+    Map<Long, Session> user_question_map = new HashMap<>();
 
     @Override
     public BotApiMethod<?> onWebhookUpdateReceived(Update update) {
-        long chat_id;
-        String chat_id_str;
-        System.out.println(update);
+
         if (update.getMessage() != null && update.getMessage().hasText()) {
-            chat_id = update.getMessage().getChatId();
-            chat_id_str = String.valueOf(chat_id);
             return service.sendMessage(update, user_question_map);
         }
-        return service.sendMessage(update, user_question_map);
-
+        return null;
 
     }
-
 }

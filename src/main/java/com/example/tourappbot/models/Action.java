@@ -15,6 +15,7 @@ public class Action {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+//    @Enumerated(EnumType.STRING)
     private ActionType type;
     private String text;
     @ManyToOne(cascade = CascadeType.ALL)

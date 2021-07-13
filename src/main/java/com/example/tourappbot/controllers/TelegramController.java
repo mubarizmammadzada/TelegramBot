@@ -11,14 +11,14 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 @RestController
 public class TelegramController {
     private final TelegramBot telegramBot;
-    private boolean flag=false;
+    private boolean flag = false;
+
     public TelegramController(TelegramBot telegramBot) {
         this.telegramBot = telegramBot;
     }
-
     @PostMapping("/")
     public BotApiMethod<?> onUpdateRecived(@RequestBody Update update) {
-        if(flag){
+        if (flag) {
             return new SendMessage();
         }
         return telegramBot.onWebhookUpdateReceived(update);
