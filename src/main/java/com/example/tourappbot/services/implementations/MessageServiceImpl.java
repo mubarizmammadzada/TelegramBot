@@ -69,8 +69,19 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
             nextQuestion = user_question.getAction().getNextQuestion();
             List<Action> actionList = actionService.getActionsByQuestion(nextQuestion);
             if (actionList.size() > 1) {
-                if (actionService.getActionByText(update.getMessage().getText()) == null) {
-                    return new SendMessage(update.getMessage().getChatId().toString(), "Duzgun cavab yaz");
+                if (user_question_map.get(update.getMessage().getFrom().getId()).getLang().equals("AZ")) {
+                    if (actionService.getActionByText(update.getMessage().getText()) == null) {
+                        return new SendMessage(update.getMessage().getChatId().toString(), "Duzgun cavab yaz");
+                    }
+                } else if (user_question_map.get(update.getMessage().getFrom().getId()).getLang().equals("EN")) {
+                    if (actionService.getActionByEnText(update.getMessage().getText()) == null) {
+                        return new SendMessage(update.getMessage().getChatId().toString(), "Duzgun cavab yaz");
+                    }
+
+                } else if (user_question_map.get(update.getMessage().getFrom().getId()).getLang().equals("RU")) {
+                    if (actionService.getActionByRuText(update.getMessage().getText()) == null) {
+                        return new SendMessage(update.getMessage().getChatId().toString(), "Duzgun cavab yaz");
+                    }
                 }
                 nextQuestion = actionList.get(0).getNextQuestion();
                 if (update.getMessage().getText().equals("Məkanın adını qeyd elə.")) {
@@ -91,14 +102,21 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
                            String user_Language,
                            Map<Long, Session> user_question_map, Update update,
                            Question nextQuestion) {
-        Action action;
-        if (update.getMessage().getText().equals("34")) {
+        Action action = null;
+        if (update.getMessage().getText().equals("Recreation and walking")) {
             System.out.println("OK");
         }
         if (actions.size() > 1) {
-            action = actionService.getActionByText(update.getMessage().getText());
+            if (user_question_map.get(update.getMessage().getFrom().getId()).getLang().equals("AZ")) {
+                action = actionService.getActionByText(update.getMessage().getText());
+            } else if (user_question_map.get(update.getMessage().getFrom().getId()).getLang().equals("EN")) {
+                action = actionService.getActionByEnText(update.getMessage().getText());
+            } else if (user_question_map.get(update.getMessage().getFrom().getId()).getLang().equals("RU")) {
+                action = actionService.getActionByRuText(update.getMessage().getText());
+            }
+
             if (action != null) {
-                List<KeyboardRow> keyboard = createRepKeyboard(actions);
+                List<KeyboardRow> keyboard = createRepKeyboard(actions, user_question_map.get(update.getMessage().getFrom().getId()));
                 sendMessage.setReplyMarkup(new ReplyKeyboardMarkup(keyboard, true, true, true, ""));
                 user_question_map.get(update.getMessage().getFrom().getId()).setAction(action);
                 setSessionMap(user_Language, user_question_map, sendMessage, update, nextQuestion);
@@ -111,8 +129,6 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
             }
             setSessionMap(user_Language, user_question_map, sendMessage, update, nextQuestion);
         }
-
-
     }
 
     private void setSessionMap(String user_Language, Map<Long, Session> user_question_map, SendMessage sendMessage,
@@ -163,16 +179,27 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
             sendMessage.setText("Siz artiq start etmisiniz");
             return sendMessage;
         }
-        List<KeyboardRow> keyboard = createRepKeyboard(actionService.getAllActions().stream().filter(a -> a.getQuestion().getId() == 1).collect(Collectors.toList()));
+        List<KeyboardRow> keyboard = createRepKeyboard(actionService.getAllActions().stream().filter(a -> a.getQuestion().getId() == 1).collect(Collectors.toList()), null);
         sendMessage.setReplyMarkup(new ReplyKeyboardMarkup(keyboard, true, true, true, ""));
         return sendMessage;
     }
 
-    public List<KeyboardRow> createRepKeyboard(List<Action> actionTranslates) {
+    public List<KeyboardRow> createRepKeyboard(List<Action> actionTranslates, Session session) {
         List<KeyboardRow> keyboard = new ArrayList<>();
         for (Action text : actionTranslates) {
             KeyboardRow row = new KeyboardRow();
-            row.add(new KeyboardButton(text.getText()));
+            if (session != null) {
+                if (session.getLang().equals("AZ")) {
+                    row.add(new KeyboardButton(text.getText_az()));
+                } else if (session.getLang().equals("EN")) {
+                    row.add(new KeyboardButton(text.getText_en()));
+                } else if (session.getLang().equals("RU")) {
+                    row.add(new KeyboardButton(text.getText_ru()));
+                }
+            } else {
+                row.add(new KeyboardButton(text.getText_az()));
+            }
+
             keyboard.add(row);
         }
         return keyboard;
@@ -181,35 +208,23 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
     public void setLanguage(String language, Map<Long, Session> user_question_map, Action action, Update update) {
         Session session = new Session();
         if (update.getMessage().getText().equals("AZ")) {
-
             action = actionService.getActionByText("AZ");
             session.setAction(action);
             session.setLang("AZ");
-            session.getUserAnswers().put(action.getQuestion().getQ_aze(), action.getText());
+            session.getUserAnswers().put(action.getQuestion().getQ_aze(), action.getText_az());
             user_question_map.put(update.getMessage().getFrom().getId(), session);
         } else if (update.getMessage().getText().equals("EN")) {
             action = actionService.getActionByText("EN");
             session.setAction(action);
             session.setLang("EN");
-            session.getUserAnswers().put(action.getQuestion().getQ_eng(), action.getText());
+            session.getUserAnswers().put(action.getQuestion().getQ_eng(), action.getText_en());
             user_question_map.put(update.getMessage().getFrom().getId(), session);
         } else if (update.getMessage().getText().equals("RU")) {
             action = actionService.getActionByText("RU");
             session.setAction(action);
             session.setLang("RU");
-            session.getUserAnswers().put(action.getQuestion().getQ_ru(), action.getText());
+            session.getUserAnswers().put(action.getQuestion().getQ_ru(), action.getText_en());
             user_question_map.put(update.getMessage().getFrom().getId(), session);
         }
-    }
-
-    public String getUserLanguage(Map<String, String> user_question) {
-        if (user_question.values().stream().filter(a -> a.equals("AZ")) != null) {
-            return "AZ";
-        } else if (user_question.values().stream().filter(a -> a.equals("EN")) != null) {
-            return "EN";
-        } else if (user_question.values().stream().filter(a -> a.equals("RU")) != null) {
-            return "RU";
-        }
-        return null;
     }
 }

@@ -17,7 +17,9 @@ public class Action {
     private Long id;
 //    @Enumerated(EnumType.STRING)
     private ActionType type;
-    private String text;
+    private String text_az;
+    private String text_en;
+    private String text_ru;
     @ManyToOne(cascade = CascadeType.ALL)
     @JoinColumn(name = "question_Id")
     private Question question;

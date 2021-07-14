@@ -10,6 +10,8 @@ public interface ActionService {
     List<Action> getActionsByNextQuestion(Question question);
 
     Action getActionByText(String text);
+    Action getActionByEnText(String text);
+    Action getActionByRuText(String text);
 
     List<Action> getAllActions();
 

@@ -7,8 +7,14 @@ import org.springframework.data.jpa.repository.Query;
 import java.util.List;
 
 public interface ActionRepository extends JpaRepository<Action, Long> {
-    @Query("select a from Action a where a.text=:text")
+    @Query("select a from Action a where a.text_az=:text")
     Action getActionByText(String text);
+
+    @Query("select a from Action a where a.text_ru=:text")
+    Action getActionByRuText(String text);
+
+    @Query("select a from Action a where a.text_en=:text")
+    Action getActionByEnText(String text);
 
     @Query("select a from Action a where a.question.id=:id")
     List<Action> getActionsByQuestion(Long id);

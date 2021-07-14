@@ -27,6 +27,16 @@ public class ActionServiceImpl implements ActionService {
     }
 
     @Override
+    public Action getActionByEnText(String text) {
+        return actionRepository.getActionByEnText(text);
+    }
+
+    @Override
+    public Action getActionByRuText(String text) {
+        return actionRepository.getActionByRuText(text);
+    }
+
+    @Override
     public Action getActionByText(String text) {
         return actionRepository.getActionByText(text);
     }
