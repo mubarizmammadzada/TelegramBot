@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 public interface ActionService {
     List<Action> getActionsByQuestion(Question question);
+    List<Action> getActionsByNextQuestion(Question question);
 
     Action getActionByText(String text);
 

@@ -7,6 +7,7 @@ import com.example.tourappbot.services.interfaces.ActionService;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+
 @Service
 public class ActionServiceImpl implements ActionService {
     ActionRepository actionRepository;
@@ -18,6 +19,11 @@ public class ActionServiceImpl implements ActionService {
     @Override
     public List<Action> getActionsByQuestion(Question question) {
         return actionRepository.getActionsByQuestion(question.getId());
+    }
+
+    @Override
+    public List<Action> getActionsByNextQuestion(Question question) {
+        return actionRepository.getActionsByNextQuestion(question.getId());
     }
 
     @Override
