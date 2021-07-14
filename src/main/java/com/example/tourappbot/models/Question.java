@@ -21,5 +21,6 @@ public class Question {
     private String q_ru;
     private String q_eng;
     private Boolean isFirst;
+    private String key;
 
 }

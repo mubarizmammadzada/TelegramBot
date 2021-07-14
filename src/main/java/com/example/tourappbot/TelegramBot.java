@@ -4,6 +4,7 @@ import com.example.tourappbot.repostiories.QuestionRepository;
 import com.example.tourappbot.services.interfaces.MessageService;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.SneakyThrows;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramWebhookBot;
@@ -37,6 +38,7 @@ public class TelegramBot extends TelegramWebhookBot {
     MessageService service;
     Map<Long, Session> user_question_map = new HashMap<>();
 
+    @SneakyThrows
     @Override
     public BotApiMethod<?> onWebhookUpdateReceived(Update update) {
 

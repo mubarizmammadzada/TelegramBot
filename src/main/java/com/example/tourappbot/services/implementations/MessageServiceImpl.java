@@ -9,6 +9,8 @@ import com.example.tourappbot.repostiories.ActionRepository;
 import com.example.tourappbot.repostiories.QuestionRepository;
 import com.example.tourappbot.services.interfaces.ActionService;
 import com.example.tourappbot.services.interfaces.QuestionService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.checkerframework.checker.units.qual.A;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
@@ -39,9 +41,11 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
     }
 
     @Override
-    public BotApiMethod<?> sendMessage(Update update, Map<Long, Session> user_question_map) {
+    public BotApiMethod<?> sendMessage(Update update, Map<Long, Session> user_question_map) throws JsonProcessingException {
         if (update.getMessage().getText().equals("/start")) {
             return startMessaging(update, user_question_map);
+        } else if (update.getMessage().getText().equals("/stop")) {
+            return stopMessaging(update, user_question_map);
         } else {
             return sendNextMessage(update, user_question_map);
         }
@@ -60,6 +64,9 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
             setLanguage(update.getMessage().getText(), user_question_map, action, update);
         }
         user_question = user_question_map.get(userId);
+        if (user_question == null) {
+            return new SendMessage(update.getMessage().getChatId().toString(), "Zehmet olmasa /start duymesine basin.");
+        }
         user_Language = user_question.getLang();
 
         if (user_question.getSessionCount() == 0) {
@@ -94,6 +101,12 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
         remove.setRemoveKeyboard(true);
         initMehtod(actions, sendMessage, user_Language, user_question_map, update, nextQuestion);
         sendMessage.setChatId(update.getMessage().getChatId().toString());
+        if (update.getMessage().getText().equals("123")) {
+            System.out.println("OK");
+        }
+        if (nextQuestion.getKey().isEmpty()) {
+            System.out.println(generateJson(update, user_question_map));
+        }
         return sendMessage;
     }
 
@@ -140,29 +153,32 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
         if (user_Language.equals("AZ")) {
             if (actions.size() > 0) {
                 Question question = actions.get(0).getQuestion();
-                user_question_map.get(update.getMessage().getFrom().getId()).getUserAnswers()
-                        .put(question.getQ_aze(), update.getMessage().getText());
+                if (question.getKey() != null) {
+                    user_question_map.get(update.getMessage().getFrom().getId()).getUserAnswers()
+                            .put(question.getKey(), update.getMessage().getText());
+                }
+
             }
             user_question_map.get(update.getMessage().getFrom().getId()).getUserAnswers()
-                    .put(nextQuestion.getQ_aze(), null);
+                    .put(nextQuestion.getKey(), null);
             sendMessage.setText(nextQuestion.getQ_aze());
         } else if (user_Language.equals("EN")) {
             if (actions.size() > 0) {
                 Question question = actions.get(0).getQuestion();
                 user_question_map.get(update.getMessage().getFrom().getId()).getUserAnswers()
-                        .put(question.getQ_eng(), update.getMessage().getText());
+                        .put(question.getKey(), update.getMessage().getText());
             }
             user_question_map.get(update.getMessage().getFrom().getId()).getUserAnswers()
-                    .put(nextQuestion.getQ_eng(), null);
+                    .put(nextQuestion.getKey(), null);
             sendMessage.setText(nextQuestion.getQ_eng());
         } else if (user_Language.equals("RU")) {
             if (actions.size() > 0) {
                 Question question = actions.get(0).getQuestion();
                 user_question_map.get(update.getMessage().getFrom().getId()).getUserAnswers()
-                        .put(question.getQ_ru(), update.getMessage().getText());
+                        .put(question.getKey(), update.getMessage().getText());
             }
             user_question_map.get(update.getMessage().getFrom().getId()).getUserAnswers()
-                    .put(nextQuestion.getQ_ru(), null);
+                    .put(nextQuestion.getKey(), null);
             sendMessage.setText(nextQuestion.getQ_ru());
         }
     }
@@ -176,7 +192,16 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
                 questionService.getQuestionByFirst().getQ_ru();
         SendMessage sendMessage = new SendMessage(chat_id_str, first_question);
         if (user_map.containsKey(update.getMessage().getFrom().getId())) {
-            sendMessage.setText("Siz artiq start etmisiniz");
+            if (user_map.get(update.getMessage().getFrom().getId()).getLang().equals("AZ")) {
+                sendMessage.setText("Siz artıq başlamısınız.");
+            }
+            if (user_map.get(update.getMessage().getFrom().getId()).getLang().equals("EN")) {
+                sendMessage.setText("You have already started.");
+            }
+            if (user_map.get(update.getMessage().getFrom().getId()).getLang().equals("ru")) {
+                sendMessage.setText("Вы уже начали.");
+            }
+            sendMessage.setText("Siz artıq başlamısınız.");
             return sendMessage;
         }
         List<KeyboardRow> keyboard = createRepKeyboard(actionService.getAllActions().stream().filter(a -> a.getQuestion().getId() == 1).collect(Collectors.toList()), null);
@@ -211,20 +236,40 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
             action = actionService.getActionByText("AZ");
             session.setAction(action);
             session.setLang("AZ");
-            session.getUserAnswers().put(action.getQuestion().getQ_aze(), action.getText_az());
+            session.getUserAnswers().put(action.getQuestion().getKey(), action.getText_az());
             user_question_map.put(update.getMessage().getFrom().getId(), session);
         } else if (update.getMessage().getText().equals("EN")) {
             action = actionService.getActionByText("EN");
             session.setAction(action);
             session.setLang("EN");
-            session.getUserAnswers().put(action.getQuestion().getQ_eng(), action.getText_en());
+            session.getUserAnswers().put(action.getQuestion().getKey(), action.getText_en());
             user_question_map.put(update.getMessage().getFrom().getId(), session);
         } else if (update.getMessage().getText().equals("RU")) {
             action = actionService.getActionByText("RU");
             session.setAction(action);
             session.setLang("RU");
-            session.getUserAnswers().put(action.getQuestion().getQ_ru(), action.getText_en());
+            session.getUserAnswers().put(action.getQuestion().getKey(), action.getText_en());
             user_question_map.put(update.getMessage().getFrom().getId(), session);
         }
+    }
+
+    public SendMessage stopMessaging(Update update, Map<Long, Session> user_map) {
+        if (user_map.containsKey(update.getMessage().getFrom().getId())) {
+            user_map.remove(update.getMessage().getFrom().getId());
+            return new SendMessage(update.getMessage().getChatId().toString(), "Stop etdiniz");
+        }
+        return null;
+    }
+
+    public String generateJson(Update update, Map<Long, Session> user_map) {
+        Session session = user_map.get(update.getMessage().getFrom().getId());
+        ObjectMapper mapper = new ObjectMapper();
+        String jsonMap = null;
+        try {
+            jsonMap = mapper.writeValueAsString(session.getUserAnswers());
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+        }
+        return jsonMap;
     }
 }
