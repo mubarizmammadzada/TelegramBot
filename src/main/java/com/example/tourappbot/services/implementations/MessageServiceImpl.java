@@ -7,11 +7,13 @@ import com.example.tourappbot.models.Action;
 import com.example.tourappbot.models.Question;
 import com.example.tourappbot.repostiories.ActionRepository;
 import com.example.tourappbot.repostiories.QuestionRepository;
+import com.example.tourappbot.repostiories.SessionRepostiory;
 import com.example.tourappbot.services.interfaces.ActionService;
 import com.example.tourappbot.services.interfaces.QuestionService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.checkerframework.checker.units.qual.A;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -34,10 +36,12 @@ import java.util.stream.Collectors;
 public class MessageServiceImpl implements com.example.tourappbot.services.interfaces.MessageService {
     ActionService actionService;
     QuestionService questionService;
+    SessionRepostiory sessionRepostiory;
 
-    public MessageServiceImpl(ActionService actionService, QuestionService questionService) {
+    public MessageServiceImpl(ActionService actionService, QuestionService questionService, SessionRepostiory sessionRepostiory) {
         this.actionService = actionService;
         this.questionService = questionService;
+        this.sessionRepostiory = sessionRepostiory;
     }
 
     @Override
@@ -64,6 +68,9 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
             setLanguage(update.getMessage().getText(), user_question_map, action, update);
         }
         user_question = user_question_map.get(userId);
+        if (update.getMessage().getText().equals("a")) {
+            System.out.println("ok");
+        }
         if (user_question == null) {
             return new SendMessage(update.getMessage().getChatId().toString(), "Zehmet olmasa /start duymesine basin.");
         }
@@ -101,12 +108,6 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
         remove.setRemoveKeyboard(true);
         initMehtod(actions, sendMessage, user_Language, user_question_map, update, nextQuestion);
         sendMessage.setChatId(update.getMessage().getChatId().toString());
-        if (update.getMessage().getText().equals("123")) {
-            System.out.println("OK");
-        }
-        if (nextQuestion.getKey().isEmpty()) {
-            System.out.println(generateJson(update, user_question_map));
-        }
         return sendMessage;
     }
 
@@ -147,40 +148,48 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
     private void setSessionMap(String user_Language, Map<Long, Session> user_question_map, SendMessage sendMessage,
                                Update update, Question nextQuestion) {
         List<Action> actions = actionService.getActionsByNextQuestion(nextQuestion);
-        if (update.getMessage().getText().equals("TourApp təklif etsin.")) {
-            System.out.println("OK");
-        }
-        if (user_Language.equals("AZ")) {
-            if (actions.size() > 0) {
-                Question question = actions.get(0).getQuestion();
-                if (question.getKey() != null) {
-                    user_question_map.get(update.getMessage().getFrom().getId()).getUserAnswers()
+
+        Session session = sessionRepostiory.findById(update.getMessage().getFrom().getId().toString()).get();
+        if (session != null) {
+            if (user_Language.equals("AZ")) {
+                if (actions.size() > 0) {
+                    Question question = actions.get(0).getQuestion();
+                    if (question.getKey() != null) {
+                        session.getUserAnswers().put(question.getKey(), update.getMessage().getText());
+                        sessionRepostiory.save(session);
+                    }
+                }
+                session.getUserAnswers().put(nextQuestion.getKey(), null);
+                sendMessage.setText(nextQuestion.getQ_aze());
+            } else if (user_Language.equals("EN")) {
+                if (actions.size() > 0) {
+                    Question question = actions.get(0).getQuestion();
+                    if (question.getKey() != null) {
+                        session.getUserAnswers().put(question.getKey(), update.getMessage().getText());
+                    }
+                    session.getUserAnswers()
                             .put(question.getKey(), update.getMessage().getText());
                 }
+                session.getUserAnswers()
+                        .put(nextQuestion.getKey(), null);
+                sendMessage.setText(nextQuestion.getQ_eng());
+            } else if (user_Language.equals("RU")) {
+                if (actions.size() > 0) {
+                    Question question = actions.get(0).getQuestion();
+                    if (question.getKey() != null) {
+                        session.getUserAnswers().put(question.getKey(), update.getMessage().getText());
+                    }
+                    session.getUserAnswers().put(question.getKey(), update.getMessage().getText());
+                }
+                session.getUserAnswers()
+                        .put(nextQuestion.getKey(), null);
+                sendMessage.setText(nextQuestion.getQ_ru());
 
             }
-            user_question_map.get(update.getMessage().getFrom().getId()).getUserAnswers()
-                    .put(nextQuestion.getKey(), null);
-            sendMessage.setText(nextQuestion.getQ_aze());
-        } else if (user_Language.equals("EN")) {
-            if (actions.size() > 0) {
-                Question question = actions.get(0).getQuestion();
-                user_question_map.get(update.getMessage().getFrom().getId()).getUserAnswers()
-                        .put(question.getKey(), update.getMessage().getText());
-            }
-            user_question_map.get(update.getMessage().getFrom().getId()).getUserAnswers()
-                    .put(nextQuestion.getKey(), null);
-            sendMessage.setText(nextQuestion.getQ_eng());
-        } else if (user_Language.equals("RU")) {
-            if (actions.size() > 0) {
-                Question question = actions.get(0).getQuestion();
-                user_question_map.get(update.getMessage().getFrom().getId()).getUserAnswers()
-                        .put(question.getKey(), update.getMessage().getText());
-            }
-            user_question_map.get(update.getMessage().getFrom().getId()).getUserAnswers()
-                    .put(nextQuestion.getKey(), null);
-            sendMessage.setText(nextQuestion.getQ_ru());
+            sessionRepostiory.save(session);
         }
+
+
     }
 
     @Override
@@ -232,6 +241,7 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
 
     public void setLanguage(String language, Map<Long, Session> user_question_map, Action action, Update update) {
         Session session = new Session();
+        session.setChatId(update.getMessage().getChatId().toString());
         if (update.getMessage().getText().equals("AZ")) {
             action = actionService.getActionByText("AZ");
             session.setAction(action);
@@ -251,10 +261,14 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
             session.getUserAnswers().put(action.getQuestion().getKey(), action.getText_en());
             user_question_map.put(update.getMessage().getFrom().getId(), session);
         }
+        sessionRepostiory.save(session);
+        System.out.println(sessionRepostiory.findById(update.getMessage().getFrom().getId().toString()).get());
+
     }
 
     public SendMessage stopMessaging(Update update, Map<Long, Session> user_map) {
         if (user_map.containsKey(update.getMessage().getFrom().getId())) {
+            sessionRepostiory.delete(user_map.get(update.getMessage().getFrom().getId()));
             user_map.remove(update.getMessage().getFrom().getId());
             return new SendMessage(update.getMessage().getChatId().toString(), "Stop etdiniz");
         }
