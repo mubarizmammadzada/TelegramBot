@@ -1,34 +1,29 @@
 package com.example.tourappbot.services.implementations;
 
 import com.example.tourappbot.Session;
-import com.example.tourappbot.TelegramBot;
-import com.example.tourappbot.enums.ActionType;
+import com.example.tourappbot.dto.OfferDto;
+import com.example.tourappbot.dto.SessionDto;
 import com.example.tourappbot.models.Action;
 import com.example.tourappbot.models.Question;
-import com.example.tourappbot.repostiories.ActionRepository;
-import com.example.tourappbot.repostiories.QuestionRepository;
-import com.example.tourappbot.repostiories.SessionRepostiory;
+import com.example.tourappbot.repostiories.SessionRedisRepository;
 import com.example.tourappbot.services.interfaces.ActionService;
 import com.example.tourappbot.services.interfaces.QuestionService;
+import com.example.tourappbot.services.interfaces.SessionService;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.checkerframework.checker.units.qual.A;
-import org.springframework.cache.annotation.Cacheable;
+import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
-import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
+import org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
-import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
-import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
+import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
+import org.telegram.telegrambots.meta.api.objects.InputFile;
+import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardRemove;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
-import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
-import java.net.Proxy;
+import javax.annotation.Nullable;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -36,16 +31,26 @@ import java.util.stream.Collectors;
 public class MessageServiceImpl implements com.example.tourappbot.services.interfaces.MessageService {
     ActionService actionService;
     QuestionService questionService;
-    SessionRepostiory sessionRepostiory;
+    SessionRedisRepository sessionRepostiory;
+    ModelMapper modelMapper;
+    RabbitService rabbitService;
+    SessionService sessionService;
 
-    public MessageServiceImpl(ActionService actionService, QuestionService questionService, SessionRepostiory sessionRepostiory) {
+    public MessageServiceImpl(ActionService actionService, QuestionService questionService, SessionRedisRepository sessionRepostiory, ModelMapper modelMapper, RabbitService rabbitService, SessionService sessionService) {
         this.actionService = actionService;
         this.questionService = questionService;
         this.sessionRepostiory = sessionRepostiory;
+        this.modelMapper = modelMapper;
+        this.rabbitService = rabbitService;
+        this.sessionService = sessionService;
     }
 
     @Override
-    public BotApiMethod<?> sendMessage(Update update, Map<Long, Session> user_question_map) throws JsonProcessingException {
+    public PartialBotApiMethod<Message> sendMessage(Update update, Map<Long, Session> user_question_map
+            , @Nullable OfferDto offerDto) throws JsonProcessingException {
+        if (offerDto != null) {
+            return sendAgentMessage(offerDto);
+        }
         if (update.getMessage().getText().equals("/start")) {
             return startMessaging(update, user_question_map);
         } else if (update.getMessage().getText().equals("/stop")) {
@@ -68,9 +73,6 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
             setLanguage(update.getMessage().getText(), user_question_map, action, update);
         }
         user_question = user_question_map.get(userId);
-        if (update.getMessage().getText().equals("a")) {
-            System.out.println("ok");
-        }
         if (user_question == null) {
             return new SendMessage(update.getMessage().getChatId().toString(), "Zehmet olmasa /start duymesine basin.");
         }
@@ -102,6 +104,9 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
                     nextQuestion = actionList.get(1).getNextQuestion();
                 }
             }
+        }
+        if (nextQuestion.getKey().isEmpty()) {
+            System.out.println(generateJson(update, user_question_map));
         }
         List<Action> actions = actionService.getActionsByQuestion(nextQuestion);
         ReplyKeyboardRemove remove = new ReplyKeyboardRemove();
@@ -148,13 +153,16 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
     private void setSessionMap(String user_Language, Map<Long, Session> user_question_map, SendMessage sendMessage,
                                Update update, Question nextQuestion) {
         List<Action> actions = actionService.getActionsByNextQuestion(nextQuestion);
-
         Session session = sessionRepostiory.findById(update.getMessage().getFrom().getId().toString()).get();
+        ;
         if (session != null) {
             if (user_Language.equals("AZ")) {
                 if (actions.size() > 0) {
                     Question question = actions.get(0).getQuestion();
-                    if (question.getKey() != null) {
+                    if (!question.getKey().isEmpty()) {
+                        if (!update.getMessage().getText().equals("AZ")) {
+                            System.out.println("ok");
+                        }
                         session.getUserAnswers().put(question.getKey(), update.getMessage().getText());
                         sessionRepostiory.save(session);
                     }
@@ -164,7 +172,7 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
             } else if (user_Language.equals("EN")) {
                 if (actions.size() > 0) {
                     Question question = actions.get(0).getQuestion();
-                    if (question.getKey() != null) {
+                    if (!question.getKey().isEmpty()) {
                         session.getUserAnswers().put(question.getKey(), update.getMessage().getText());
                     }
                     session.getUserAnswers()
@@ -176,7 +184,7 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
             } else if (user_Language.equals("RU")) {
                 if (actions.size() > 0) {
                     Question question = actions.get(0).getQuestion();
-                    if (question.getKey() != null) {
+                    if (!question.getKey().isEmpty()) {
                         session.getUserAnswers().put(question.getKey(), update.getMessage().getText());
                     }
                     session.getUserAnswers().put(question.getKey(), update.getMessage().getText());
@@ -242,6 +250,7 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
     public void setLanguage(String language, Map<Long, Session> user_question_map, Action action, Update update) {
         Session session = new Session();
         session.setChatId(update.getMessage().getChatId().toString());
+        session.setClientId(update.getMessage().getFrom().getId().toString());
         if (update.getMessage().getText().equals("AZ")) {
             action = actionService.getActionByText("AZ");
             session.setAction(action);
@@ -262,7 +271,6 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
             user_question_map.put(update.getMessage().getFrom().getId(), session);
         }
         sessionRepostiory.save(session);
-        System.out.println(sessionRepostiory.findById(update.getMessage().getFrom().getId().toString()).get());
 
     }
 
@@ -275,15 +283,26 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
         return null;
     }
 
-    public String generateJson(Update update, Map<Long, Session> user_map) {
-        Session session = user_map.get(update.getMessage().getFrom().getId());
-        ObjectMapper mapper = new ObjectMapper();
-        String jsonMap = null;
-        try {
-            jsonMap = mapper.writeValueAsString(session.getUserAnswers());
-        } catch (JsonProcessingException e) {
-            e.printStackTrace();
-        }
-        return jsonMap;
+    public SessionDto generateJson(Update update, Map<Long, Session> user_map) {
+        Session session = sessionRepostiory.findById(update.getMessage().getChatId().toString()).get();
+        SessionDto sessionDto = modelMapper.map(session, SessionDto.class);
+        System.out.println(sessionDto);
+        com.example.tourappbot.models.Session dbSession = new com.example.tourappbot.models.Session();
+        dbSession.setSessionId(session.getSessionId().toString());
+        dbSession.setClientId(session.getClientId());
+        dbSession.setChatId(session.getChatId());
+        dbSession.setActive(true);
+        sessionService.create(dbSession);
+        rabbitService.sessionSender(sessionDto);
+        return sessionDto;
+    }
+
+    public SendPhoto sendAgentMessage(OfferDto offerDto) {
+        SendPhoto sendPhoto=new SendPhoto();
+        com.example.tourappbot.models.Session session = sessionService.getSessionBySessionId(offerDto.getSessionId());
+        sendPhoto.setChatId(session.getChatId());
+        InputFile inputFile = new InputFile(offerDto.getImage());
+        sendPhoto.setPhoto(inputFile);
+        return sendPhoto;
     }
 }

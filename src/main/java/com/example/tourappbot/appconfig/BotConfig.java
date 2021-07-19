@@ -3,6 +3,7 @@ package com.example.tourappbot.appconfig;
 import com.example.tourappbot.TelegramBot;
 import com.example.tourappbot.repostiories.QuestionRepository;
 import lombok.Data;
+import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -25,5 +26,9 @@ public class BotConfig {
         telegramBot.setBotPath(webHookPath);
         telegramBot.setBotUsername(botUsername);
         return telegramBot;
+    }
+    @Bean
+    public ModelMapper modelMapper() {
+        return new ModelMapper();
     }
 }
