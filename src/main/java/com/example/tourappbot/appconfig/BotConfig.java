@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.telegram.telegrambots.bots.DefaultBotOptions;
 
 @Configuration
@@ -17,7 +18,6 @@ public class BotConfig {
     private String webHookPath;
     private String botUsername;
     private String botToken;
-    private DefaultBotOptions.ProxyType proxyType;
 
     @Bean
     public TelegramBot myTelegramBot() {
@@ -27,8 +27,15 @@ public class BotConfig {
         telegramBot.setBotUsername(botUsername);
         return telegramBot;
     }
+
     @Bean
     public ModelMapper modelMapper() {
         return new ModelMapper();
     }
+
+//    @Bean
+//    @Primary
+//    public TelegramBot telegramBot() {
+//        return new TelegramBot();
+//    }
 }

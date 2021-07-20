@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramWebhookBot;
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
@@ -16,7 +17,7 @@ import java.util.Map;
 
 @Getter
 @Setter
-@Component
+//@Component
 public class TelegramBot extends TelegramWebhookBot {
     private String botPath;
     private String botUsername;

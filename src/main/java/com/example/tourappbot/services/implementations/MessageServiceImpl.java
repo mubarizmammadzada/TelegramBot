@@ -1,6 +1,7 @@
 package com.example.tourappbot.services.implementations;
 
 import com.example.tourappbot.Session;
+import com.example.tourappbot.TelegramBot;
 import com.example.tourappbot.dto.OfferDto;
 import com.example.tourappbot.dto.SessionDto;
 import com.example.tourappbot.models.Action;
@@ -10,7 +11,12 @@ import com.example.tourappbot.services.interfaces.ActionService;
 import com.example.tourappbot.services.interfaces.QuestionService;
 import com.example.tourappbot.services.interfaces.SessionService;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.rabbitmq.client.Return;
+import lombok.SneakyThrows;
 import org.modelmapper.ModelMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -22,6 +28,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMar
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardRemove;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
+import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import javax.annotation.Nullable;
 import java.util.*;
@@ -35,8 +42,15 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
     ModelMapper modelMapper;
     RabbitService rabbitService;
     SessionService sessionService;
+    @Autowired
+    TelegramBot bot;
 
-    public MessageServiceImpl(ActionService actionService, QuestionService questionService, SessionRedisRepository sessionRepostiory, ModelMapper modelMapper, RabbitService rabbitService, SessionService sessionService) {
+    public MessageServiceImpl(ActionService actionService,
+                              QuestionService questionService,
+                              SessionRedisRepository sessionRepostiory,
+                              ModelMapper modelMapper,
+                              RabbitService rabbitService,
+                              SessionService sessionService) {
         this.actionService = actionService;
         this.questionService = questionService;
         this.sessionRepostiory = sessionRepostiory;
@@ -49,7 +63,10 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
     public PartialBotApiMethod<Message> sendMessage(Update update, Map<Long, Session> user_question_map
             , @Nullable OfferDto offerDto) throws JsonProcessingException {
         if (offerDto != null) {
-            return sendAgentMessage(offerDto);
+//            SendPhoto sendPhoto = sendAgentMessage(offerDto);
+//            System.out.println(sendPhoto.getPhoto().getAttachName() + " sasasas");
+//            return sendPhoto;
+          return   sendAgentMessage(offerDto);
         }
         if (update.getMessage().getText().equals("/start")) {
             return startMessaging(update, user_question_map);
@@ -302,7 +319,13 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
         com.example.tourappbot.models.Session session = sessionService.getSessionBySessionId(offerDto.getSessionId());
         sendPhoto.setChatId(session.getChatId());
         InputFile inputFile = new InputFile(offerDto.getImage());
-        sendPhoto.setPhoto(inputFile);
+//        sendPhoto.setPhoto(inputFile);
+        try {
+            bot.execute(new SendPhoto(session.getChatId(),inputFile));
+        } catch (TelegramApiException telegramApiException) {
+            telegramApiException.printStackTrace();
+        }
         return sendPhoto;
+
     }
 }
