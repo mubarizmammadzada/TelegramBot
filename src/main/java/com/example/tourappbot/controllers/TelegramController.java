@@ -19,7 +19,7 @@ public class TelegramController {
         this.messageService = messageService;
     }
 
-    private boolean flag = false;
+    private boolean flag = true;
 
     @PostMapping("/")
     public BotApiMethod<?> onUpdateReceived(@RequestBody Update update) {
@@ -27,7 +27,6 @@ public class TelegramController {
             return new SendMessage();
         }
         return telegramBot.onWebhookUpdateReceived(update);
-
     }
 
 

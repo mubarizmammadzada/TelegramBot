@@ -16,7 +16,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-public class Session{
+public class Session {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Id
     private Long id;
@@ -24,6 +24,7 @@ public class Session{
     private String sessionId;
     private String clientId;
     private boolean isActive;
+    private String language;
 
     @Override
     public String toString() {

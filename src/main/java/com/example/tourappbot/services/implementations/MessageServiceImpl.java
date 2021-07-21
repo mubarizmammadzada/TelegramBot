@@ -7,6 +7,7 @@ import com.example.tourappbot.dto.SessionDto;
 import com.example.tourappbot.models.Action;
 import com.example.tourappbot.models.Question;
 import com.example.tourappbot.repostiories.SessionRedisRepository;
+import com.example.tourappbot.repostiories.SessionRepository;
 import com.example.tourappbot.services.interfaces.ActionService;
 import com.example.tourappbot.services.interfaces.QuestionService;
 import com.example.tourappbot.services.interfaces.SessionService;
@@ -31,6 +32,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.Keyboard
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import javax.annotation.Nullable;
+import java.io.File;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -38,35 +40,35 @@ import java.util.stream.Collectors;
 public class MessageServiceImpl implements com.example.tourappbot.services.interfaces.MessageService {
     ActionService actionService;
     QuestionService questionService;
-    SessionRedisRepository sessionRepostiory;
+    SessionRepository sessionRepostiory;
     ModelMapper modelMapper;
     RabbitService rabbitService;
     SessionService sessionService;
+    SessionRedisRepository redisRepository;
     @Autowired
     TelegramBot bot;
 
-    public MessageServiceImpl(ActionService actionService,
-                              QuestionService questionService,
-                              SessionRedisRepository sessionRepostiory,
+    public MessageServiceImpl(ActionService actionService, QuestionService questionService,
+                              SessionRepository sessionRepostiory,
                               ModelMapper modelMapper,
                               RabbitService rabbitService,
-                              SessionService sessionService) {
+                              SessionService sessionService,
+                              SessionRedisRepository redisRepository) {
         this.actionService = actionService;
         this.questionService = questionService;
         this.sessionRepostiory = sessionRepostiory;
         this.modelMapper = modelMapper;
         this.rabbitService = rabbitService;
         this.sessionService = sessionService;
+        this.redisRepository = redisRepository;
     }
+
 
     @Override
     public PartialBotApiMethod<Message> sendMessage(Update update, Map<Long, Session> user_question_map
             , @Nullable OfferDto offerDto) throws JsonProcessingException {
         if (offerDto != null) {
-//            SendPhoto sendPhoto = sendAgentMessage(offerDto);
-//            System.out.println(sendPhoto.getPhoto().getAttachName() + " sasasas");
-//            return sendPhoto;
-          return   sendAgentMessage(offerDto);
+            return sendAgentMessage(offerDto);
         }
         if (update.getMessage().getText().equals("/start")) {
             return startMessaging(update, user_question_map);
@@ -79,7 +81,6 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
 
     @Override
     public SendMessage sendNextMessage(Update update, Map<Long, Session> user_question_map) {
-        Map<String, String> map = new HashMap<>();
         SendMessage sendMessage = new SendMessage();
         Action action = null;
         long userId = update.getMessage().getFrom().getId();
@@ -123,7 +124,7 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
             }
         }
         if (nextQuestion.getKey().isEmpty()) {
-            System.out.println(generateJson(update, user_question_map));
+            createSession(update);
         }
         List<Action> actions = actionService.getActionsByQuestion(nextQuestion);
         ReplyKeyboardRemove remove = new ReplyKeyboardRemove();
@@ -170,7 +171,7 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
     private void setSessionMap(String user_Language, Map<Long, Session> user_question_map, SendMessage sendMessage,
                                Update update, Question nextQuestion) {
         List<Action> actions = actionService.getActionsByNextQuestion(nextQuestion);
-        Session session = sessionRepostiory.findById(update.getMessage().getFrom().getId().toString()).get();
+        Session session = redisRepository.findById(update.getMessage().getFrom().getId().toString()).get();
         ;
         if (session != null) {
             if (user_Language.equals("AZ")) {
@@ -181,7 +182,7 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
                             System.out.println("ok");
                         }
                         session.getUserAnswers().put(question.getKey(), update.getMessage().getText());
-                        sessionRepostiory.save(session);
+                        redisRepository.save(session);
                     }
                 }
                 session.getUserAnswers().put(nextQuestion.getKey(), null);
@@ -211,7 +212,7 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
                 sendMessage.setText(nextQuestion.getQ_ru());
 
             }
-            sessionRepostiory.save(session);
+            redisRepository.save(session);
         }
 
 
@@ -287,21 +288,42 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
             session.getUserAnswers().put(action.getQuestion().getKey(), action.getText_en());
             user_question_map.put(update.getMessage().getFrom().getId(), session);
         }
-        sessionRepostiory.save(session);
+        redisRepository.save(session);
 
     }
 
     public SendMessage stopMessaging(Update update, Map<Long, Session> user_map) {
-        if (user_map.containsKey(update.getMessage().getFrom().getId())) {
-            sessionRepostiory.delete(user_map.get(update.getMessage().getFrom().getId()));
+        List<com.example.tourappbot.models.Session> sessionList = sessionRepostiory.getSessionByClientId(update.getMessage()
+                .getFrom().getId().toString());
+        Optional<com.example.tourappbot.models.Session> session = sessionList.stream().filter(s -> s.isActive()).findAny();
+        if ((!session.isEmpty()) && session.get().isActive()) {
+            session.get().setActive(false);
+            sessionRepostiory.save(session.get());
+            if (session.get().getLanguage().equals("AZ")) {
+                return new SendMessage(update.getMessage().getChatId().toString(), "Söhbəti dayandırdınız.");
+            } else if (session.get().getLanguage().equals("EN")) {
+                return new SendMessage(update.getMessage().getChatId().toString(), "You stopped messaging.");
+            } else if (session.get().getLanguage().equals("EN")) {
+                return new SendMessage(update.getMessage().getChatId().toString(), "Вы перестали обмениваться сообщениями.");
+            }
+        }
+        Optional<Session> sessionRedis = redisRepository.findById(update.getMessage().getFrom().getId().toString());
+        if (!sessionRedis.isEmpty()) {
+            redisRepository.delete(user_map.get(update.getMessage().getFrom().getId()));
             user_map.remove(update.getMessage().getFrom().getId());
-            return new SendMessage(update.getMessage().getChatId().toString(), "Stop etdiniz");
+            if (sessionRedis.get().getLang().equals("AZ")) {
+                return new SendMessage(update.getMessage().getChatId().toString(), "Söhbəti dayandırdınız.");
+            } else if (sessionRedis.get().getLang().equals("EN")) {
+                return new SendMessage(update.getMessage().getChatId().toString(), "You stopped messaging.");
+            } else if (sessionRedis.get().getLang().equals("EN")) {
+                return new SendMessage(update.getMessage().getChatId().toString(), "Вы перестали обмениваться сообщениями.");
+            }
         }
         return null;
     }
 
-    public SessionDto generateJson(Update update, Map<Long, Session> user_map) {
-        Session session = sessionRepostiory.findById(update.getMessage().getChatId().toString()).get();
+    public void createSession(Update update) {
+        Session session = redisRepository.findById(update.getMessage().getChatId().toString()).get();
         SessionDto sessionDto = modelMapper.map(session, SessionDto.class);
         System.out.println(sessionDto);
         com.example.tourappbot.models.Session dbSession = new com.example.tourappbot.models.Session();
@@ -309,19 +331,32 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
         dbSession.setClientId(session.getClientId());
         dbSession.setChatId(session.getChatId());
         dbSession.setActive(true);
-        sessionService.create(dbSession);
-        rabbitService.sessionSender(sessionDto);
-        return sessionDto;
+        dbSession.setLanguage(session.getLang());
+        List<com.example.tourappbot.models.Session> sessionList = sessionRepostiory
+                .getSessionByClientId(dbSession.getClientId());
+        Optional<com.example.tourappbot.models.Session> existSession = sessionList.stream()
+                .filter(s -> s.getSessionId().equals(dbSession.getSessionId())).findAny();
+        if (!existSession.isEmpty()) {
+            if (!existSession.get().isActive()) {
+                sessionService.create(dbSession);
+                rabbitService.sessionSender(sessionDto);
+            }
+        } else {
+            sessionService.create(dbSession);
+            rabbitService.sessionSender(sessionDto);
+        }
+
     }
 
     public SendPhoto sendAgentMessage(OfferDto offerDto) {
-        SendPhoto sendPhoto=new SendPhoto();
+        SendPhoto sendPhoto = new SendPhoto();
         com.example.tourappbot.models.Session session = sessionService.getSessionBySessionId(offerDto.getSessionId());
         sendPhoto.setChatId(session.getChatId());
         InputFile inputFile = new InputFile(offerDto.getImage());
-//        sendPhoto.setPhoto(inputFile);
         try {
-            bot.execute(new SendPhoto(session.getChatId(),inputFile));
+            bot.execute(new SendPhoto(session.getChatId(), inputFile));
+            offerDto.getImage().getParentFile().delete();
+            offerDto.getImage().delete();
         } catch (TelegramApiException telegramApiException) {
             telegramApiException.printStackTrace();
         }

@@ -32,10 +32,4 @@ public class BotConfig {
     public ModelMapper modelMapper() {
         return new ModelMapper();
     }
-
-//    @Bean
-//    @Primary
-//    public TelegramBot telegramBot() {
-//        return new TelegramBot();
-//    }
 }
