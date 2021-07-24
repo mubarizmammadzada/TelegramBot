@@ -226,7 +226,8 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
                 questionService.getQuestionByFirst().getQ_eng() + "\n" +
                 questionService.getQuestionByFirst().getQ_ru();
         SendMessage sendMessage = new SendMessage(chat_id_str, first_question);
-        if (user_map.containsKey(update.getMessage().getFrom().getId())) {
+        Optional<Session> sessionRedis = redisRepository.findById(update.getMessage().getFrom().getId().toString());
+        if (!sessionRedis.isEmpty()) {
             if (user_map.get(update.getMessage().getFrom().getId()).getLang().equals("AZ")) {
                 sendMessage.setText("Siz artıq başlamısınız.");
             }
@@ -296,26 +297,28 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
         List<com.example.tourappbot.models.Session> sessionList = sessionRepostiory.getSessionByClientId(update.getMessage()
                 .getFrom().getId().toString());
         Optional<com.example.tourappbot.models.Session> session = sessionList.stream().filter(s -> s.isActive()).findAny();
+        Optional<Session> sessionRedis = redisRepository.findById(update.getMessage().getFrom().getId().toString());
         if ((!session.isEmpty()) && session.get().isActive()) {
             session.get().setActive(false);
             sessionRepostiory.save(session.get());
+            if (!sessionRedis.isEmpty())
+                redisRepository.delete(user_map.get(update.getMessage().getFrom().getId()));
+            user_map.remove(update.getMessage().getFrom().getId());
             if (session.get().getLanguage().equals("AZ")) {
                 return new SendMessage(update.getMessage().getChatId().toString(), "Söhbəti dayandırdınız.");
             } else if (session.get().getLanguage().equals("EN")) {
                 return new SendMessage(update.getMessage().getChatId().toString(), "You stopped messaging.");
-            } else if (session.get().getLanguage().equals("EN")) {
+            } else if (session.get().getLanguage().equals("RU")) {
                 return new SendMessage(update.getMessage().getChatId().toString(), "Вы перестали обмениваться сообщениями.");
             }
         }
-        Optional<Session> sessionRedis = redisRepository.findById(update.getMessage().getFrom().getId().toString());
         if (!sessionRedis.isEmpty()) {
             redisRepository.delete(user_map.get(update.getMessage().getFrom().getId()));
-            user_map.remove(update.getMessage().getFrom().getId());
             if (sessionRedis.get().getLang().equals("AZ")) {
                 return new SendMessage(update.getMessage().getChatId().toString(), "Söhbəti dayandırdınız.");
             } else if (sessionRedis.get().getLang().equals("EN")) {
                 return new SendMessage(update.getMessage().getChatId().toString(), "You stopped messaging.");
-            } else if (sessionRedis.get().getLang().equals("EN")) {
+            } else if (sessionRedis.get().getLang().equals("RU")) {
                 return new SendMessage(update.getMessage().getChatId().toString(), "Вы перестали обмениваться сообщениями.");
             }
         }

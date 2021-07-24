@@ -19,7 +19,7 @@ public class TelegramController {
         this.messageService = messageService;
     }
 
-    private boolean flag = true;
+    private boolean flag = false;
 
     @PostMapping("/")
     public BotApiMethod<?> onUpdateReceived(@RequestBody Update update) {

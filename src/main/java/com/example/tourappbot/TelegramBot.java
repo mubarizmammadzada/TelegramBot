@@ -32,10 +32,9 @@ public class TelegramBot extends TelegramWebhookBot {
     @Override
     public BotApiMethod<?> onWebhookUpdateReceived(Update update) {
 
-        if (update.getMessage() != null && update.getMessage().hasText()) {
+        if (update.getMessage()!= null && update.getMessage().hasText()) {
             return (BotApiMethod<?>) service.sendMessage(update, user_question_map,null);
         }
         return null;
-
     }
 }
