@@ -1,23 +1,21 @@
 package com.example.tourappbot.services.implementations;
 
+import com.example.tourappbot.dto.OfferRedis;
 import com.example.tourappbot.Session;
 import com.example.tourappbot.TelegramBot;
 import com.example.tourappbot.dto.OfferDto;
 import com.example.tourappbot.dto.SessionDto;
 import com.example.tourappbot.models.Action;
 import com.example.tourappbot.models.Question;
+import com.example.tourappbot.repostiories.OfferRedisRepository;
 import com.example.tourappbot.repostiories.SessionRedisRepository;
 import com.example.tourappbot.repostiories.SessionRepository;
 import com.example.tourappbot.services.interfaces.ActionService;
 import com.example.tourappbot.services.interfaces.QuestionService;
 import com.example.tourappbot.services.interfaces.SessionService;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.rabbitmq.client.Return;
-import lombok.SneakyThrows;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -32,7 +30,6 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.Keyboard
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import javax.annotation.Nullable;
-import java.io.File;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -47,13 +44,15 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
     SessionRedisRepository redisRepository;
     @Autowired
     TelegramBot bot;
+    OfferRedisRepository offerRedisRepository;
 
     public MessageServiceImpl(ActionService actionService, QuestionService questionService,
                               SessionRepository sessionRepostiory,
                               ModelMapper modelMapper,
                               RabbitService rabbitService,
                               SessionService sessionService,
-                              SessionRedisRepository redisRepository) {
+                              SessionRedisRepository redisRepository,
+                              OfferRedisRepository offerRedisRepository) {
         this.actionService = actionService;
         this.questionService = questionService;
         this.sessionRepostiory = sessionRepostiory;
@@ -61,6 +60,7 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
         this.rabbitService = rabbitService;
         this.sessionService = sessionService;
         this.redisRepository = redisRepository;
+        this.offerRedisRepository = offerRedisRepository;
     }
 
 
@@ -81,13 +81,17 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
 
     @Override
     public SendMessage sendNextMessage(Update update, Map<Long, Session> user_question_map) {
+        if (update.getMessage().getText().equals("asd")) {
+            System.out.println("asd");
+        }
         SendMessage sendMessage = new SendMessage();
         Action action = null;
         long userId = update.getMessage().getFrom().getId();
         Question nextQuestion = null;
         String user_Language = "";
         Session user_question;
-        if (!user_question_map.containsKey(update.getMessage().getFrom().getId())) {
+        Optional<Session> redisSession = redisRepository.findById(update.getMessage().getFrom().getId().toString());
+        if (redisSession.isEmpty()) {
             setLanguage(update.getMessage().getText(), user_question_map, action, update);
         }
         user_question = user_question_map.get(userId);
@@ -123,13 +127,14 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
                 }
             }
         }
-        if (nextQuestion.getKey().isEmpty()) {
-            createSession(update);
-        }
+
         List<Action> actions = actionService.getActionsByQuestion(nextQuestion);
         ReplyKeyboardRemove remove = new ReplyKeyboardRemove();
         remove.setRemoveKeyboard(true);
         initMehtod(actions, sendMessage, user_Language, user_question_map, update, nextQuestion);
+        if (nextQuestion.getKey().isEmpty()) {
+            createSession(update);
+        }
         sendMessage.setChatId(update.getMessage().getChatId().toString());
         return sendMessage;
     }
@@ -140,8 +145,8 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
                            Map<Long, Session> user_question_map, Update update,
                            Question nextQuestion) {
         Action action = null;
-        if (update.getMessage().getText().equals("Recreation and walking")) {
-            System.out.println("OK");
+        if (update.getMessage().getText().equals("asd")) {
+            System.out.println("asd");
         }
         if (actions.size() > 1) {
             if (user_question_map.get(update.getMessage().getFrom().getId()).getLang().equals("AZ")) {
@@ -156,7 +161,7 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
                 List<KeyboardRow> keyboard = createRepKeyboard(actions, user_question_map.get(update.getMessage().getFrom().getId()));
                 sendMessage.setReplyMarkup(new ReplyKeyboardMarkup(keyboard, true, true, true, ""));
                 user_question_map.get(update.getMessage().getFrom().getId()).setAction(action);
-                setSessionMap(user_Language, user_question_map, sendMessage, update, nextQuestion);
+                setSessionMap(user_Language, sendMessage, update, nextQuestion);
             } else {
                 sendMessage.setText("Duzgun cavab yaz");
             }
@@ -164,55 +169,55 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
             if (actions.size() != 0) {
                 user_question_map.get(update.getMessage().getFrom().getId()).setAction(actions.get(0));
             }
-            setSessionMap(user_Language, user_question_map, sendMessage, update, nextQuestion);
+            setSessionMap(user_Language, sendMessage, update, nextQuestion);
         }
     }
 
-    private void setSessionMap(String user_Language, Map<Long, Session> user_question_map, SendMessage sendMessage,
+    private void setSessionMap(String user_Language, SendMessage sendMessage,
                                Update update, Question nextQuestion) {
+        if (update.getMessage().getText().equals("asd")) {
+            System.out.println("asd");
+        }
         List<Action> actions = actionService.getActionsByNextQuestion(nextQuestion);
-        Session session = redisRepository.findById(update.getMessage().getFrom().getId().toString()).get();
+        Optional<Session> session = redisRepository.findById(update.getMessage().getFrom().getId().toString());
         ;
-        if (session != null) {
+        if (!session.isEmpty()) {
             if (user_Language.equals("AZ")) {
                 if (actions.size() > 0) {
                     Question question = actions.get(0).getQuestion();
                     if (!question.getKey().isEmpty()) {
-                        if (!update.getMessage().getText().equals("AZ")) {
-                            System.out.println("ok");
-                        }
-                        session.getUserAnswers().put(question.getKey(), update.getMessage().getText());
-                        redisRepository.save(session);
+                        session.get().getUserAnswers().put(question.getKey(), update.getMessage().getText());
+                        redisRepository.save(session.get());
                     }
                 }
-                session.getUserAnswers().put(nextQuestion.getKey(), null);
+                session.get().getUserAnswers().put(nextQuestion.getKey(), null);
                 sendMessage.setText(nextQuestion.getQ_aze());
             } else if (user_Language.equals("EN")) {
                 if (actions.size() > 0) {
                     Question question = actions.get(0).getQuestion();
                     if (!question.getKey().isEmpty()) {
-                        session.getUserAnswers().put(question.getKey(), update.getMessage().getText());
+                        session.get().getUserAnswers().put(question.getKey(), update.getMessage().getText());
                     }
-                    session.getUserAnswers()
+                    session.get().getUserAnswers()
                             .put(question.getKey(), update.getMessage().getText());
                 }
-                session.getUserAnswers()
+                session.get().getUserAnswers()
                         .put(nextQuestion.getKey(), null);
                 sendMessage.setText(nextQuestion.getQ_eng());
             } else if (user_Language.equals("RU")) {
                 if (actions.size() > 0) {
                     Question question = actions.get(0).getQuestion();
                     if (!question.getKey().isEmpty()) {
-                        session.getUserAnswers().put(question.getKey(), update.getMessage().getText());
+                        session.get().getUserAnswers().put(question.getKey(), update.getMessage().getText());
                     }
-                    session.getUserAnswers().put(question.getKey(), update.getMessage().getText());
+                    session.get().getUserAnswers().put(question.getKey(), update.getMessage().getText());
                 }
-                session.getUserAnswers()
+                session.get().getUserAnswers()
                         .put(nextQuestion.getKey(), null);
                 sendMessage.setText(nextQuestion.getQ_ru());
 
             }
-            redisRepository.save(session);
+            redisRepository.save(session.get());
         }
 
 
@@ -220,24 +225,28 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
 
     @Override
     public SendMessage startMessaging(Update update, Map<Long, Session> user_map) {
+        Optional<Session> sessionRedis = redisRepository.findById(update.getMessage().getFrom().getId().toString());
+        if (!sessionRedis.isEmpty()) {
+            System.out.println("ok");
+            System.out.println(redisRepository.findAll());
+        }
         long chat_id = update.getMessage().getChatId();
         String chat_id_str = String.valueOf(chat_id);
         String first_question = questionService.getQuestionByFirst().getQ_aze() + "\n" +
                 questionService.getQuestionByFirst().getQ_eng() + "\n" +
                 questionService.getQuestionByFirst().getQ_ru();
         SendMessage sendMessage = new SendMessage(chat_id_str, first_question);
-        Optional<Session> sessionRedis = redisRepository.findById(update.getMessage().getFrom().getId().toString());
+
         if (!sessionRedis.isEmpty()) {
-            if (user_map.get(update.getMessage().getFrom().getId()).getLang().equals("AZ")) {
+            if (sessionRedis.get().getLang().equals("AZ")) {
                 sendMessage.setText("Siz artıq başlamısınız.");
             }
-            if (user_map.get(update.getMessage().getFrom().getId()).getLang().equals("EN")) {
+            if (sessionRedis.get().getLang().equals("EN")) {
                 sendMessage.setText("You have already started.");
             }
-            if (user_map.get(update.getMessage().getFrom().getId()).getLang().equals("ru")) {
+            if (sessionRedis.get().getLang().equals("RU")) {
                 sendMessage.setText("Вы уже начали.");
             }
-            sendMessage.setText("Siz artıq başlamısınız.");
             return sendMessage;
         }
         List<KeyboardRow> keyboard = createRepKeyboard(actionService.getAllActions().stream().filter(a -> a.getQuestion().getId() == 1).collect(Collectors.toList()), null);
@@ -267,6 +276,9 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
     }
 
     public void setLanguage(String language, Map<Long, Session> user_question_map, Action action, Update update) {
+        if (update.getMessage().getText().equals("AZ")) {
+            System.out.println("asd");
+        }
         Session session = new Session();
         session.setChatId(update.getMessage().getChatId().toString());
         session.setClientId(update.getMessage().getFrom().getId().toString());
@@ -276,20 +288,23 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
             session.setLang("AZ");
             session.getUserAnswers().put(action.getQuestion().getKey(), action.getText_az());
             user_question_map.put(update.getMessage().getFrom().getId(), session);
+            redisRepository.save(session);
         } else if (update.getMessage().getText().equals("EN")) {
             action = actionService.getActionByText("EN");
             session.setAction(action);
             session.setLang("EN");
             session.getUserAnswers().put(action.getQuestion().getKey(), action.getText_en());
             user_question_map.put(update.getMessage().getFrom().getId(), session);
+            redisRepository.save(session);
         } else if (update.getMessage().getText().equals("RU")) {
             action = actionService.getActionByText("RU");
             session.setAction(action);
             session.setLang("RU");
             session.getUserAnswers().put(action.getQuestion().getKey(), action.getText_en());
             user_question_map.put(update.getMessage().getFrom().getId(), session);
+            redisRepository.save(session);
         }
-        redisRepository.save(session);
+
 
     }
 
@@ -298,11 +313,10 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
                 .getFrom().getId().toString());
         Optional<com.example.tourappbot.models.Session> session = sessionList.stream().filter(s -> s.isActive()).findAny();
         Optional<Session> sessionRedis = redisRepository.findById(update.getMessage().getFrom().getId().toString());
+        System.out.println(sessionRedis);
         if ((!session.isEmpty()) && session.get().isActive()) {
             session.get().setActive(false);
-            sessionRepostiory.save(session.get());
-            if (!sessionRedis.isEmpty())
-                redisRepository.delete(user_map.get(update.getMessage().getFrom().getId()));
+            redisRepository.delete(sessionRedis.get());
             user_map.remove(update.getMessage().getFrom().getId());
             if (session.get().getLanguage().equals("AZ")) {
                 return new SendMessage(update.getMessage().getChatId().toString(), "Söhbəti dayandırdınız.");
@@ -313,7 +327,12 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
             }
         }
         if (!sessionRedis.isEmpty()) {
-            redisRepository.delete(user_map.get(update.getMessage().getFrom().getId()));
+            System.out.println(sessionRedis.get());
+            redisRepository.delete(sessionRedis.get());
+            user_map.remove(update.getMessage().getFrom().getId());
+            if (!sessionRedis.isEmpty()) {
+                System.out.println("ok");
+            }
             if (sessionRedis.get().getLang().equals("AZ")) {
                 return new SendMessage(update.getMessage().getChatId().toString(), "Söhbəti dayandırdınız.");
             } else if (sessionRedis.get().getLang().equals("EN")) {
@@ -324,7 +343,7 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
         }
         return null;
     }
-
+    @Override
     public void createSession(Update update) {
         Session session = redisRepository.findById(update.getMessage().getChatId().toString()).get();
         SessionDto sessionDto = modelMapper.map(session, SessionDto.class);
@@ -357,13 +376,24 @@ public class MessageServiceImpl implements com.example.tourappbot.services.inter
         sendPhoto.setChatId(session.getChatId());
         InputFile inputFile = new InputFile(offerDto.getImage());
         try {
-            bot.execute(new SendPhoto(session.getChatId(), inputFile));
-            offerDto.getImage().getParentFile().delete();
-            offerDto.getImage().delete();
+            Message message = bot.execute(new SendPhoto(session.getChatId(), inputFile));
+            offerDto.setMessageId(message.getMessageId());
+            OfferRedis offerRedis = new OfferRedis();
+            offerRedis.setOfferId(offerDto.getOfferId());
+            offerRedis.setMessageId(message.getMessageId());
+            offerRedisRepository.save(offerRedis);
         } catch (TelegramApiException telegramApiException) {
             telegramApiException.printStackTrace();
         }
         return sendPhoto;
 
+    }
+    @Override
+    public void sendReply(Integer messageId,String contactInfo){
+        Optional<OfferRedis> offerRedis=offerRedisRepository.findById(messageId);
+        if(!offerRedis.isEmpty()){
+            offerRedis.get().setContactInfo(contactInfo);
+            rabbitService.replySender(offerRedis.get());
+        }
     }
 }

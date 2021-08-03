@@ -10,6 +10,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramWebhookBot;
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
+import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 
 import java.util.HashMap;
@@ -31,10 +33,21 @@ public class TelegramBot extends TelegramWebhookBot {
     @SneakyThrows
     @Override
     public BotApiMethod<?> onWebhookUpdateReceived(Update update) {
+        if (update.hasMessage()) {
+            Message message = update.getMessage();
+            if (message.isReply() && message.getReplyToMessage().hasPhoto()) {
+                Message replyMessage = message.getReplyToMessage();
+                Integer messageId = replyMessage.getMessageId();
+                service.sendReply(messageId,update.getMessage().getText());
+                return new SendMessage(update.getMessage().getChatId().toString(),"Reply etdiniz");
+            }
 
-        if (update.getMessage()!= null && update.getMessage().hasText()) {
-            return (BotApiMethod<?>) service.sendMessage(update, user_question_map,null);
         }
+        if (update.getMessage() != null && update.getMessage().hasText()) {
+            return (BotApiMethod<?>) service.sendMessage(update, user_question_map, null);
+        }
+
+
         return null;
     }
 }

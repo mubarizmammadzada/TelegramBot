@@ -21,5 +21,6 @@ public class SessionDto implements Serializable {
     private String chatId;
     private UUID sessionId = UUID.randomUUID();
     private String lang;
+    private Long offerId;
     private Map<String, String> userAnswers = new HashMap<>();
 }

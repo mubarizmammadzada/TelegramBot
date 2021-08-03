@@ -17,4 +17,8 @@ public interface MessageService {
     PartialBotApiMethod<Message> sendMessage(Update update, Map<Long, Session> session, @Nullable OfferDto offerDto) throws JsonProcessingException;
 
     SendMessage sendNextMessage(Update update, Map<Long, Session> session);
+
+    void createSession(Update update);
+
+    public void sendReply(Integer messageId,String contactInfo);
 }
